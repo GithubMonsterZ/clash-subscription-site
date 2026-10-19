@@ -8,6 +8,46 @@ import shutil
 import uuid
 
 
+def full_subscription(single_token):
+    """Accept a separately authorized full-chain export, never publish it at root."""
+    raw = os.environ.get("FULL_CONFIG_JSON")
+    token = os.environ.get("FULL_SUBSCRIPTION_TOKEN")
+    if raw is None and token is None:
+        return None
+    if raw is None or token is None:
+        raise ValueError("Both full subscription environment variables are required")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token) or token == single_token:
+        raise ValueError("Invalid or duplicate full subscription token")
+    config = json.loads(raw)
+    fields = {"mode", "log-level", "ipv6", "unified-delay", "dns", "rules",
+              "mixed-port", "allow-lan", "bind-address", "find-process-mode",
+              "profile", "proxies", "proxy-groups"}
+    if set(config) - fields:
+        raise ValueError("Unexpected full configuration settings")
+    if config.get("allow-lan") is not False or config.get("bind-address") != "127.0.0.1":
+        raise ValueError("Full configuration must bind loopback only")
+    if config.get("mode") != "rule" or len(config.get("proxies", [])) != 2:
+        raise ValueError("Expected a two-node rule configuration")
+    nodes = config["proxies"]
+    node_fields = {"name", "type", "server", "port", "uuid", "network", "tls",
+                   "udp", "flow", "servername", "client-fingerprint", "reality-opts", "dialer-proxy"}
+    for node in nodes:
+        if set(node) - node_fields or node.get("type") != "vless" or node.get("tls") is not True:
+            raise ValueError("Invalid full-chain node")
+        uuid.UUID(node["uuid"])
+    by_name = {node["name"]: node for node in nodes}
+    front, exit_name = "DMIT美国优化10/16", "DMIT → v128直出"
+    if set(by_name) != {front, exit_name} or "dialer-proxy" in by_name[front]:
+        raise ValueError("Unexpected chain structure")
+    if by_name[exit_name].get("dialer-proxy") != front:
+        raise ValueError("Missing DMIT front proxy")
+    if config.get("proxy-groups") != [{"name": "Proxy", "type": "select", "proxies": [exit_name]}]:
+        raise ValueError("Full subscription must select the chained exit")
+    if not isinstance(config.get("rules"), list) or config["rules"][-1:] != ["MATCH,Proxy"]:
+        raise ValueError("Missing full routing rules")
+    return token, config
+
+
 def build():
     token = os.environ["SUBSCRIPTION_TOKEN"]
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
@@ -50,12 +90,17 @@ def build():
         "proxy-groups": [{"name": "Proxy", "type": "select", "proxies": [node["name"], "DIRECT"]}],
         "rules": rules,
     }
+    full = full_subscription(token)
     # JSON is valid YAML; no YAML library or other build dependencies needed.
     out = Path(__file__).resolve().parent / "public"
     if out.exists():
         shutil.rmtree(out)
     (out / "s" / token).mkdir(parents=True)
     (out / "s" / token / "clash.yaml").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if full:
+        full_token, full_config = full
+        (out / "s" / full_token).mkdir()
+        (out / "s" / full_token / "clash.yaml").write_text(json.dumps(full_config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "index.html").write_text('<!doctype html><meta name="robots" content="noindex,nofollow"><title>Subscription service</title><p>Use your subscription link in Clash Verge Rev.</p>\n', encoding="utf-8")
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     print("Subscription built successfully.")
