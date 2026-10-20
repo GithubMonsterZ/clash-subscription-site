@@ -48,11 +48,7 @@ def full_subscription(single_token):
     return token, config
 
 
-def build():
-    token = os.environ["SUBSCRIPTION_TOKEN"]
-    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
-        raise ValueError("Invalid subscription token")
-    source = json.loads(os.environ["DMIT_NODE_JSON"])
+def single_config(source, name):
     fields = {"name", "type", "server", "port", "uuid", "network", "tls",
               "udp", "flow", "servername", "client-fingerprint", "reality-opts"}
     node = {k: v for k, v in source.items() if k in fields}
@@ -61,7 +57,7 @@ def build():
     uuid.UUID(node["uuid"])
     if not isinstance(node["port"], int) or not 1 <= node["port"] <= 65535:
         raise ValueError("Invalid node port")
-    node["name"] = "DMIT美国优化10/16"
+    node["name"] = name
     node["reality-opts"] = {k: node["reality-opts"][k] for k in ("public-key", "short-id")}
     rules = ["IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
              "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
@@ -90,7 +86,31 @@ def build():
         "proxy-groups": [{"name": "Proxy", "type": "select", "proxies": [node["name"], "DIRECT"]}],
         "rules": rules,
     }
+    return config
+
+
+def build():
+    token = os.environ["SUBSCRIPTION_TOKEN"]
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+        raise ValueError("Invalid subscription token")
+    config = single_config(json.loads(os.environ["DMIT_NODE_JSON"]), "DMIT美国优化10/16")
     full = full_subscription(token)
+    extra = None
+    extra_raw = os.environ.get("VPS38_NODE_JSON")
+    extra_token = os.environ.get("VPS38_SUBSCRIPTION_TOKEN")
+    if extra_raw is not None or extra_token is not None:
+        if extra_raw is None or extra_token is None:
+            raise ValueError("Both VPS38 environment variables are required")
+        used_tokens = {token}
+        if full:
+            used_tokens.add(full[0])
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", extra_token) or extra_token in used_tokens:
+            raise ValueError("Invalid or duplicate VPS38 subscription token")
+        extra = single_config(json.loads(extra_raw), "vps38-direct")
+        # Modern REALITY servers require this key share; retain it only for
+        # this explicitly configured endpoint, leaving older exports unchanged.
+        if json.loads(extra_raw).get("reality-opts", {}).get("support-x25519mlkem768") is True:
+            extra["proxies"][0]["reality-opts"]["support-x25519mlkem768"] = True
     # JSON is valid YAML; no YAML library or other build dependencies needed.
     out = Path(__file__).resolve().parent / "public"
     if out.exists():
@@ -101,6 +121,9 @@ def build():
         full_token, full_config = full
         (out / "s" / full_token).mkdir()
         (out / "s" / full_token / "clash.yaml").write_text(json.dumps(full_config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if extra is not None:
+        (out / "s" / extra_token).mkdir()
+        (out / "s" / extra_token / "clash.yaml").write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "index.html").write_text('<!doctype html><meta name="robots" content="noindex,nofollow"><title>Subscription service</title><p>Use your subscription link in Clash Verge Rev.</p>\n', encoding="utf-8")
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     print("Subscription built successfully.")
