@@ -111,6 +111,23 @@ def build():
         # this explicitly configured endpoint, leaving older exports unchanged.
         if json.loads(extra_raw).get("reality-opts", {}).get("support-x25519mlkem768") is True:
             extra["proxies"][0]["reality-opts"]["support-x25519mlkem768"] = True
+    vps67 = None
+    vps67_raw = os.environ.get("VPS67_NODE_JSON")
+    vps67_token = os.environ.get("VPS67_SUBSCRIPTION_TOKEN")
+    if vps67_raw is not None or vps67_token is not None:
+        if vps67_raw is None or vps67_token is None:
+            raise ValueError("Both VPS67 environment variables are required")
+        used_tokens = {token}
+        if full:
+            used_tokens.add(full[0])
+        if extra is not None:
+            used_tokens.add(extra_token)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", vps67_token) or vps67_token in used_tokens:
+            raise ValueError("Invalid or duplicate VPS67 subscription token")
+        vps67_source = json.loads(vps67_raw)
+        vps67 = single_config(vps67_source, "vps67-direct")
+        if vps67_source.get("reality-opts", {}).get("support-x25519mlkem768") is True:
+            vps67["proxies"][0]["reality-opts"]["support-x25519mlkem768"] = True
     # JSON is valid YAML; no YAML library or other build dependencies needed.
     out = Path(__file__).resolve().parent / "public"
     if out.exists():
@@ -124,6 +141,9 @@ def build():
     if extra is not None:
         (out / "s" / extra_token).mkdir()
         (out / "s" / extra_token / "clash.yaml").write_text(json.dumps(extra, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if vps67 is not None:
+        (out / "s" / vps67_token).mkdir()
+        (out / "s" / vps67_token / "clash.yaml").write_text(json.dumps(vps67, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "index.html").write_text('<!doctype html><meta name="robots" content="noindex,nofollow"><title>Subscription service</title><p>Use your subscription link in Clash Verge Rev.</p>\n', encoding="utf-8")
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     print("Subscription built successfully.")

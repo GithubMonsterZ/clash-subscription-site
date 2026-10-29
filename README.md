@@ -13,3 +13,5 @@ The generated URL is a bearer link: anyone with the link can download the node c
 Never commit generated output or environment values. Disable preview deployments. Configure `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`, and `Referrer-Policy: no-referrer` response headers on the hosting service.
 
 An optional independent VPS38 single-node subscription uses `VPS38_NODE_JSON` and `VPS38_SUBSCRIPTION_TOKEN`. Both must be set together; all subscription paths must differ. It uses the same generic routing as the original single-node export and preserves the explicitly enabled `reality-opts.support-x25519mlkem768` compatibility setting. Existing subscriptions keep their original content.
+
+An optional independent VPS67 single-node subscription uses `VPS67_NODE_JSON` and `VPS67_SUBSCRIPTION_TOKEN`. Both must be set together, and its token must differ from every existing subscription token. It exports a direct node with generic private-network/China direct routing and preserves explicitly enabled REALITY compatibility settings. Existing subscription bytes remain unchanged. Node credentials and URL tokens belong only in the hosting environment.
