@@ -176,6 +176,27 @@ def build():
         if hy2_source.get("type") != "hysteria2":
             raise ValueError("Expected Hysteria2 for VPS38 HY2 subscription")
         hy2 = single_config(hy2_source, "vps38-hy2-direct")
+    chain = None
+    chain_raw = os.environ.get("VPS38_CHAIN_NODE_JSON")
+    chain_token = os.environ.get("VPS38_CHAIN_SUBSCRIPTION_TOKEN")
+    if chain_raw is not None or chain_token is not None:
+        if chain_raw is None or chain_token is None:
+            raise ValueError("Both VPS38 chain environment variables are required")
+        used_tokens = {token}
+        if full:
+            used_tokens.add(full[0])
+        if extra is not None:
+            used_tokens.add(extra_token)
+        if vps67 is not None:
+            used_tokens.add(vps67_token)
+        if hy2 is not None:
+            used_tokens.add(hy2_token)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", chain_token) or chain_token in used_tokens:
+            raise ValueError("Invalid or duplicate VPS38 chain subscription token")
+        chain_source = json.loads(chain_raw)
+        if chain_source.get("type") != "hysteria2":
+            raise ValueError("Expected Hysteria2 for VPS38 chain subscription")
+        chain = single_config(chain_source, "vps38-hy2-vps67")
     # JSON is valid YAML; no YAML library or other build dependencies needed.
     out = Path(__file__).resolve().parent / "public"
     if out.exists():
@@ -195,6 +216,9 @@ def build():
     if hy2 is not None:
         (out / "s" / hy2_token).mkdir()
         (out / "s" / hy2_token / "clash.yaml").write_text(json.dumps(hy2, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if chain is not None:
+        (out / "s" / chain_token).mkdir()
+        (out / "s" / chain_token / "clash.yaml").write_text(json.dumps(chain, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "index.html").write_text('<!doctype html><meta name="robots" content="noindex,nofollow"><title>Subscription service</title><p>Use your subscription link in Clash Verge Rev.</p>\n', encoding="utf-8")
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     print("Subscription built successfully.")
