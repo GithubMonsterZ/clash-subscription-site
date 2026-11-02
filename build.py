@@ -49,6 +49,31 @@ def full_subscription(single_token):
 
 
 def single_config(source, name):
+    if source.get("type") == "hysteria2":
+        fields = {"name", "type", "server", "port", "password", "sni",
+                  "fingerprint", "skip-cert-verify", "alpn"}
+        if set(source) - fields:
+            raise ValueError("Unexpected Hysteria2 node settings")
+        node = dict(source)
+        if not isinstance(node.get("server"), str) or not node["server"]:
+            raise ValueError("Missing Hysteria2 server")
+        if not isinstance(node.get("password"), str) or not node["password"]:
+            raise ValueError("Missing Hysteria2 password")
+        if not isinstance(node.get("sni"), str) or not node["sni"]:
+            raise ValueError("Missing Hysteria2 SNI")
+        if not isinstance(node.get("fingerprint"), str) or not re.fullmatch(r"[0-9A-Fa-f]{64}", node["fingerprint"]):
+            raise ValueError("Hysteria2 requires a SHA256 certificate fingerprint")
+        if node.get("skip-cert-verify") is not False or node.get("alpn") != ["h3"]:
+            raise ValueError("Hysteria2 requires certificate pinning and h3")
+        if type(node.get("port")) is not int or not 1 <= node["port"] <= 65535:
+            raise ValueError("Invalid Hysteria2 port")
+        node["name"] = name
+    else:
+        node = vless_node(source, name)
+    return node_config(node)
+
+
+def vless_node(source, name):
     fields = {"name", "type", "server", "port", "uuid", "network", "tls",
               "udp", "flow", "servername", "client-fingerprint", "reality-opts"}
     node = {k: v for k, v in source.items() if k in fields}
@@ -59,6 +84,10 @@ def single_config(source, name):
         raise ValueError("Invalid node port")
     node["name"] = name
     node["reality-opts"] = {k: node["reality-opts"][k] for k in ("public-key", "short-id")}
+    return node
+
+
+def node_config(node):
     rules = ["IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
              "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
              "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve",
@@ -128,6 +157,25 @@ def build():
         vps67 = single_config(vps67_source, "vps67-direct")
         if vps67_source.get("reality-opts", {}).get("support-x25519mlkem768") is True:
             vps67["proxies"][0]["reality-opts"]["support-x25519mlkem768"] = True
+    hy2 = None
+    hy2_raw = os.environ.get("VPS38_HY2_NODE_JSON")
+    hy2_token = os.environ.get("VPS38_HY2_SUBSCRIPTION_TOKEN")
+    if hy2_raw is not None or hy2_token is not None:
+        if hy2_raw is None or hy2_token is None:
+            raise ValueError("Both VPS38 HY2 environment variables are required")
+        used_tokens = {token}
+        if full:
+            used_tokens.add(full[0])
+        if extra is not None:
+            used_tokens.add(extra_token)
+        if vps67 is not None:
+            used_tokens.add(vps67_token)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", hy2_token) or hy2_token in used_tokens:
+            raise ValueError("Invalid or duplicate VPS38 HY2 subscription token")
+        hy2_source = json.loads(hy2_raw)
+        if hy2_source.get("type") != "hysteria2":
+            raise ValueError("Expected Hysteria2 for VPS38 HY2 subscription")
+        hy2 = single_config(hy2_source, "vps38-hy2-direct")
     # JSON is valid YAML; no YAML library or other build dependencies needed.
     out = Path(__file__).resolve().parent / "public"
     if out.exists():
@@ -144,6 +192,9 @@ def build():
     if vps67 is not None:
         (out / "s" / vps67_token).mkdir()
         (out / "s" / vps67_token / "clash.yaml").write_text(json.dumps(vps67, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if hy2 is not None:
+        (out / "s" / hy2_token).mkdir()
+        (out / "s" / hy2_token / "clash.yaml").write_text(json.dumps(hy2, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "index.html").write_text('<!doctype html><meta name="robots" content="noindex,nofollow"><title>Subscription service</title><p>Use your subscription link in Clash Verge Rev.</p>\n', encoding="utf-8")
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     print("Subscription built successfully.")
