@@ -194,9 +194,12 @@ def build():
         if not re.fullmatch(r"[A-Za-z0-9_-]{43}", chain_token) or chain_token in used_tokens:
             raise ValueError("Invalid or duplicate VPS38 chain subscription token")
         chain_source = json.loads(chain_raw)
-        if chain_source.get("type") != "hysteria2":
-            raise ValueError("Expected Hysteria2 for VPS38 chain subscription")
-        chain = single_config(chain_source, "vps38-hy2-vps67")
+        if chain_source.get("type") not in ("hysteria2", "vless"):
+            raise ValueError("Expected Hysteria2 or VLESS for VPS38 chain subscription")
+        chain_name = "vps38-vps67" if chain_source["type"] == "vless" else "vps38-hy2-vps67"
+        chain = single_config(chain_source, chain_name)
+        if chain_source.get("type") == "vless" and chain_source.get("reality-opts", {}).get("support-x25519mlkem768") is True:
+            chain["proxies"][0]["reality-opts"]["support-x25519mlkem768"] = True
     # JSON is valid YAML; no YAML library or other build dependencies needed.
     out = Path(__file__).resolve().parent / "public"
     if out.exists():
