@@ -236,6 +236,22 @@ def build():
         chain = single_config(chain_source, chain_name)
         if chain_source.get("type") == "vless" and chain_source.get("reality-opts", {}).get("support-x25519mlkem768") is True:
             chain["proxies"][0]["reality-opts"]["support-x25519mlkem768"] = True
+    cdn_chain = None
+    cdn_raw = os.environ.get("VPS38_CDN_CHAIN_NODE_JSON")
+    cdn_token = os.environ.get("VPS38_CDN_CHAIN_SUBSCRIPTION_TOKEN")
+    if cdn_raw is not None or cdn_token is not None:
+        if cdn_raw is None or cdn_token is None:
+            raise ValueError("Both VPS38 CDN chain variables are required")
+        used_tokens = {token}
+        for existing_config, existing_token in ((full, os.environ.get("FULL_SUBSCRIPTION_TOKEN")),
+                                                (extra, extra_token), (vps67, vps67_token),
+                                                (hy2, hy2_token), (chain, chain_token)):
+            if existing_config is not None:
+                used_tokens.add(existing_token)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", cdn_token) or cdn_token in used_tokens:
+            raise ValueError("Invalid or duplicate CDN chain subscription token")
+        cdn_source = json.loads(cdn_raw)
+        cdn_chain = node_config(vless_ws_node(cdn_source, "vps38-vps67"))
     # JSON is valid YAML; no YAML library or other build dependencies needed.
     out = Path(__file__).resolve().parent / "public"
     if out.exists():
@@ -258,6 +274,9 @@ def build():
     if chain is not None:
         (out / "s" / chain_token).mkdir()
         (out / "s" / chain_token / "clash.yaml").write_text(json.dumps(chain, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if cdn_chain is not None:
+        (out / "s" / cdn_token).mkdir()
+        (out / "s" / cdn_token / "clash.yaml").write_text(json.dumps(cdn_chain, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     (out / "index.html").write_text('<!doctype html><meta name="robots" content="noindex,nofollow"><title>Subscription service</title><p>Use your subscription link in Clash Verge Rev.</p>\n', encoding="utf-8")
     (out / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
     print("Subscription built successfully.")

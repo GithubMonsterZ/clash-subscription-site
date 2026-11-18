@@ -19,3 +19,8 @@ An optional independent VPS67 single-node subscription uses `VPS67_NODE_JSON` an
 An optional independent Hysteria2 subscription uses `VPS38_HY2_NODE_JSON` and `VPS38_HY2_SUBSCRIPTION_TOKEN`, set together with a unique token. It exports `vps38-hy2-direct` with the same generic routing. Its node must include a SHA256 leaf-certificate `fingerprint`, `skip-cert-verify: false`, and `alpn: [h3]`. It contains no fixed adapter, TUN settings, or controller. Existing subscription bytes remain unchanged.
 
 An independent quota-managed HY2 entry to an existing server-side chain uses `VPS38_CHAIN_NODE_JSON` and `VPS38_CHAIN_SUBSCRIPTION_TOKEN`. Its exported name is `vps38-hy2-vps67`; both variables are required and its token must differ from all existing paths. Quotas live on the server: changing an account's limit does not modify this subscription, token, or authentication. Existing five subscriptions remain unchanged.
+
+Optional independent CDN relay export uses `VPS38_CDN_CHAIN_NODE_JSON` and
+`VPS38_CDN_CHAIN_SUBSCRIPTION_TOKEN`. Set both together; the node must be VLESS
+WebSocket with verified TLS. Its exported name is `vps38-vps67`. The token must
+be unique across all exports. Existing HY2 relay exports remain independent.
