@@ -83,7 +83,33 @@ def single_config(source, name):
     return node_config(node)
 
 
+def vless_ws_node(source, name):
+    fields = {"name", "type", "server", "port", "uuid", "network", "tls",
+              "udp", "servername", "client-fingerprint", "skip-cert-verify", "alpn", "ws-opts"}
+    if set(source) - fields or source.get("type") != "vless" or source.get("tls") is not True:
+        raise ValueError("Invalid VLESS WebSocket node settings")
+    if source.get("network") != "ws" or source.get("skip-cert-verify") is not False:
+        raise ValueError("WebSocket requires TLS certificate verification")
+    uuid.UUID(source["uuid"])
+    if type(source.get("port")) is not int or not 1 <= source["port"] <= 65535:
+        raise ValueError("Invalid WebSocket port")
+    if not isinstance(source.get("server"), str) or not source["server"]:
+        raise ValueError("Missing WebSocket server")
+    if source.get("servername") != source["server"] or source.get("alpn") != ["http/1.1"]:
+        raise ValueError("WebSocket requires matching SNI and HTTP/1.1")
+    opts = source.get("ws-opts")
+    if not isinstance(opts, dict) or set(opts) != {"path", "headers"}:
+        raise ValueError("Invalid WebSocket options")
+    if not isinstance(opts["path"], str) or not re.fullmatch(r"/[A-Za-z0-9/_-]+", opts["path"]):
+        raise ValueError("Invalid WebSocket path")
+    if opts["headers"] != {"Host": source["server"]}:
+        raise ValueError("WebSocket Host must match server")
+    return dict(source, name=name)
+
+
 def vless_node(source, name):
+    if source.get("network") == "ws":
+        return vless_ws_node(source, name)
     fields = {"name", "type", "server", "port", "uuid", "network", "tls",
               "udp", "flow", "servername", "client-fingerprint", "reality-opts"}
     node = {k: v for k, v in source.items() if k in fields}
