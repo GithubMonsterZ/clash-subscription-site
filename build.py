@@ -51,7 +51,7 @@ def full_subscription(single_token):
 def single_config(source, name):
     if source.get("type") == "hysteria2":
         fields = {"name", "type", "server", "port", "password", "sni",
-                  "fingerprint", "skip-cert-verify", "alpn"}
+                  "fingerprint", "skip-cert-verify", "alpn", "ports", "hop-interval"}
         if set(source) - fields:
             raise ValueError("Unexpected Hysteria2 node settings")
         node = dict(source)
@@ -67,6 +67,16 @@ def single_config(source, name):
             raise ValueError("Hysteria2 requires certificate pinning and h3")
         if type(node.get("port")) is not int or not 1 <= node["port"] <= 65535:
             raise ValueError("Invalid Hysteria2 port")
+        if "ports" in node or "hop-interval" in node:
+            ports = node.get("ports")
+            if not isinstance(ports, str) or not re.fullmatch(r"[0-9]{1,5}-[0-9]{1,5}", ports):
+                raise ValueError("Hysteria2 hopping requires a port range")
+            first, last = map(int, ports.split("-"))
+            if not 1 <= first <= last <= 65535:
+                raise ValueError("Invalid Hysteria2 hopping range")
+            interval = node.get("hop-interval")
+            if type(interval) is not int or not 1 <= interval <= 3600:
+                raise ValueError("Invalid Hysteria2 hopping interval")
         node["name"] = name
     else:
         node = vless_node(source, name)
